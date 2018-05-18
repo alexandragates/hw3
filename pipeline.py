@@ -353,3 +353,49 @@ def get_training_testing_datasets(df=None, time_col=None, period=None):
 			keep_times.append(time)
 
 	return(test_dfs, train_dfs, keep_times)
+
+def create_validate_clf(train_data=None, test_data=None, threshold=None,
+                        feature_list=None, y_column=None, clf_list=None):
+    '''
+    PURPOSE: To  create and validate all models in one fell swoop
+    
+    INPUTS:
+        train_data (pandas df): the training data
+        threshold (float): threshold for probabilities to be 1
+        test_data (pandas df): the testing data
+        feature_list (list of str): list of colnames to treat as features
+        y_column (str): name of column to predict
+        clf_list (list of str): list of classifiers to include, defaults to all
+        
+    RETURNS:
+        models (dict): dictionary of type of clf to their models on the training set
+        evaluations (dict): dictionary of type of clf to its evaluation metrics on the testing data
+    '''
+    clf_list = ['logistic_regression', 'knn', 'decision_tree', 'random_forest', 'svm', 
+                'boosting', 'bagging'] if clf_list is None else clf_list
+    if threshold is None:
+        print ("Setting threshold to 0.5")
+        threshold = 0.5
+    models = {}
+    evaluations = {}
+    for mod in clf_list:
+        model = Pipeline([
+            ('scaler',StandardScaler()),
+            ('clf', SKLEARN_MODELS[mod])
+        ])
+        model = model.fit(train_data[feature_list], train_data[y_column])
+        models[mod] = model
+        if mod != 'svm':
+            y_pred = model.predict_proba(test_data[feature_list])        
+            y_metric = [1 if (i >= threshold) else 0 for i in y_pred[:,1]]
+        else: 
+            y_metric = model.predict(test_data[feature_list])
+        accuracy = metrics.accuracy_score(test_data[y_column],y_metric)
+        f1 = metrics.f1_score(test_data[y_column],y_metric)
+        precision = metrics.precision_score(test_data[y_column],y_metric)
+        recall = metrics.recall_score(test_data[y_column],y_metric)
+        roc_auc = roc_auc_score(test_data[y_column], y_metric)
+        evaluations[mod] = {'accuracy': accuracy, 'f1': f1, 'recall': recall, 
+                            'precision': precision, 'roc': roc_auc}
+        
+    return models, evaluations
